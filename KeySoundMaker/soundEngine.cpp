@@ -1,9 +1,4 @@
-# include <stdio.h>
-# include <conio.h>
-# include <iostream>
 # include <fstream>
-# include <dirent.h>
-# include <vector>
 # include <cstring>
 # include <time.h>
 # include <windows.h>
@@ -14,7 +9,6 @@
 
 SoundEngine::SoundEngine(char* dirStr) {
 	srand(time(NULL));
-	_dirStr = dirStr;
 
 	DIR *dir;
 	char *fileStr;
@@ -24,10 +18,10 @@ SoundEngine::SoundEngine(char* dirStr) {
 		while ((ent = readdir(dir)) != NULL) {
 
 			if (strstr(ent->d_name, ".wav")) {
-				fileStr = (char*)malloc(strlen(_dirStr) + strlen(ent->d_name) + 2);
-				strcpy(fileStr, _dirStr);
-				strcpy(&fileStr[strlen(_dirStr)], "\\");
-				strcpy(&fileStr[strlen(_dirStr)+1], ent->d_name);
+				fileStr = (char*)malloc(strlen(dirStr) + strlen(ent->d_name) + 2);
+				strcpy(fileStr, dirStr);
+				strcpy(&fileStr[strlen(dirStr)], "\\");
+				strcpy(&fileStr[strlen(dirStr) + 1], ent->d_name);
 
 				wav = readWavFile(fileStr);
 
@@ -53,27 +47,48 @@ SoundEngine::SoundEngine(char* dirStr) {
 						upSounds.push_back(wav);
 					}
 				}
+				free(fileStr);
 			}
 		}
 		closedir(dir);
 	}
-
 	wav = readWavFile("C:\\Windows\\media\\chimes.wav");
 
-	if (downSounds.empty())
+	if (downSounds.empty()) {
 		downSounds.push_back(wav);
-	if (downSpaceSounds.empty())
+		wav = _strdup(wav);			//makes deletion more straightforward
+	}
+	if (downSpaceSounds.empty()) {
 		downSpaceSounds.push_back(wav);
-	if (downReturnSounds.empty())
+		wav = _strdup(wav);
+	}
+	if (downReturnSounds.empty()) {
 		downReturnSounds.push_back(wav);
-	if (upSounds.empty())
+		wav = _strdup(wav);
+	}
+	if (upSounds.empty()) {
 		upSounds.push_back(wav);
-	if (upSpaceSounds.empty())
+		wav = _strdup(wav);
+	}
+	if (upSpaceSounds.empty()) {
 		upSpaceSounds.push_back(wav);
-	if (upReturnSounds.empty())
+		wav = _strdup(wav);
+	}
+	if (upReturnSounds.empty()) {
 		upReturnSounds.push_back(wav);
+		wav = _strdup(wav);
+	}
+	delete wav;
 }
 
+SoundEngine::~SoundEngine() {
+	deleteSounds(downSounds);
+	deleteSounds(downSpaceSounds);
+	deleteSounds(downReturnSounds);
+	deleteSounds(upSounds);
+	deleteSounds(upSpaceSounds);
+	deleteSounds(upReturnSounds);
+}
 
 void SoundEngine::playDownSound(int keyType) {
 	char *filestr;
@@ -107,6 +122,12 @@ void SoundEngine::playUpSound(int keyType) {
 	PlaySound(filestr, NULL, SND_ASYNC | SND_MEMORY);
 }
 
+int SoundEngine::soundsLoaded() {
+	return downSounds.size() + downSpaceSounds.size() + downReturnSounds.size() + upSounds.size() + upSpaceSounds.size()
+		+ upReturnSounds.size();
+	
+}
+
 char *readWavFile(char *str) {
 	std::ifstream fwav(str, std::ifstream::binary);
 	if (!fwav)
@@ -120,4 +141,13 @@ char *readWavFile(char *str) {
 
 	fwav.close();
 	return wav;
+}
+
+void deleteSounds(std::vector<char*> sounds) {
+	char *tmp;
+	while (!sounds.empty()) {
+		tmp = sounds.back();
+		sounds.pop_back();
+		delete[]tmp;
+	}
 }

@@ -1,13 +1,7 @@
-# include <stdio.h>
-# include <conio.h>
-# include <iostream>
 # include <list>
-# include <vector>
-# include <algorithm>
 # include <windows.h>
 # include <winuser.h>
 # include <mmsystem.h>
-# include <dirent.h>
 
 # include "soundEngine.h"
 
@@ -26,13 +20,7 @@ HMENU folderSelect;
 bool	running;	/* Used in main loop */
 std::list<DWORD> pressedKeys;
 std::vector<char*> directories;
-SoundEngine sound("CMStormTKBlue");
-
-bool keyReleased(const DWORD value) {
-	if (GetAsyncKeyState(value) & 0x8000)
-		return false;
-	return true;
-}
+SoundEngine *sound = 0;
 
 void addFolders() {
 	DIR *dir;
@@ -65,7 +53,7 @@ void initNotifyIconData() {
 	strcpy(trayIcon.szTip, "KeySoundMaker");
 	trayIcon.uCallbackMessage = WM_TRAYICON;
 	trayIcon.uFlags = NIF_ICON | NIF_TIP | NIF_MESSAGE;
-	trayIcon.uID = 1; 
+	trayIcon.uID = 1;
 	trayIcon.hIcon = (HICON)LoadImage(NULL, TEXT("mxblue256.ico"), IMAGE_ICON, 0, 0, LR_LOADFROMFILE);
 
 }
@@ -79,11 +67,12 @@ __declspec(dllexport) LRESULT CALLBACK handlekeys(int code, WPARAM wp, LPARAM lp
 		if (wp == WM_SYSKEYDOWN || wp == WM_KEYDOWN) {
 			bool found = (std::find(pressedKeys.begin(), pressedKeys.end(), st_hook.vkCode) != pressedKeys.end());
 			if (!found) {
-				sound.playDownSound(st_hook.vkCode);
+				sound->playDownSound(st_hook.vkCode);
 				pressedKeys.push_back(st_hook.vkCode);
 			}
-		} else if (wp == WM_SYSKEYUP || wp == WM_KEYUP) {			
-			sound.playUpSound(st_hook.vkCode);
+		}
+		else if (wp == WM_SYSKEYUP || wp == WM_KEYUP) {
+			sound->playUpSound(st_hook.vkCode);
 			pressedKeys.remove(st_hook.vkCode);
 		}
 	}
@@ -94,16 +83,17 @@ LRESULT CALLBACK windowprocedure(HWND l_hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
 	switch (msg) {
 	case WM_CREATE:
-		trayMenu = CreatePopupMenu();	
+		char soundstring[30];
+		sprintf(&soundstring[0], "Sounds loaded: %d", sound->soundsLoaded());
+		trayMenu = CreatePopupMenu();
 		folderSelect = CreatePopupMenu();
 		addFolders();
+		AppendMenu(trayMenu, MF_DISABLED, TRAY_EXIT_ITEM + 1, soundstring);
 		AppendMenu(trayMenu, MF_POPUP, (UINT_PTR)folderSelect, "Select Folder...");
 		AppendMenu(trayMenu, MF_STRING, TRAY_EXIT_ITEM, "Exit");
 		break;
 
 	case WM_TRAYICON:
-		//if (lp == WM_LBUTTONUP)
-			//restore();
 		if ((lp == WM_LBUTTONUP) || (lp == WM_RBUTTONUP)) {
 			POINT curPoint;
 			GetCursorPos(&curPoint);
@@ -119,10 +109,16 @@ LRESULT CALLBACK windowprocedure(HWND l_hwnd, UINT msg, WPARAM wp, LPARAM lp)
 			if (clicked == TRAY_EXIT_ITEM) {
 				running = false;
 			}
-			else if ((clicked - TRAY_FOLDER_ITEM < directories.size()) && clicked - TRAY_FOLDER_ITEM >= 0)
-				sound = SoundEngine(directories[clicked - TRAY_FOLDER_ITEM]);
+			else if ((clicked - TRAY_FOLDER_ITEM < directories.size()) && clicked - TRAY_FOLDER_ITEM >= 0) {
+				if (sound != 0)
+					delete sound;
+				sound = new SoundEngine(directories[clicked - TRAY_FOLDER_ITEM]);
 
-			
+				char soundstring[30];
+				sprintf(&soundstring[0], "Sounds loaded: %d", sound->soundsLoaded());
+				ModifyMenu(trayMenu, 0, MF_BYPOSITION | MF_DISABLED, TRAY_EXIT_ITEM + 1, soundstring);
+
+			}
 		};
 		break;
 	case WM_NCHITTEST:	{					//??????????????????????????
@@ -132,7 +128,7 @@ LRESULT CALLBACK windowprocedure(HWND l_hwnd, UINT msg, WPARAM wp, LPARAM lp)
 		else
 			return uHitTest;
 	}
-	case WM_CLOSE: 
+	case WM_CLOSE:
 	case WM_DESTROY:
 		running = false;
 		break;
@@ -144,61 +140,19 @@ LRESULT CALLBACK windowprocedure(HWND l_hwnd, UINT msg, WPARAM wp, LPARAM lp)
 	return DefWindowProc(l_hwnd, msg, wp, lp);
 }
 
-//int main(int argc, char *argv[]) {
-//	MSG msg;
-//	HINSTANCE modulehandle;
-//	
-//	hwnd = FindWindow("ConsoleWindowClass", NULL);
-//	//ShowWindow(hwnd, 0);
-//
-//	memset(&trayIcon, 0, sizeof(NOTIFYICONDATA));
-//
-//	trayIcon.cbSize = sizeof(NOTIFYICONDATA);
-//	trayIcon.hIcon = LoadIcon(NULL, IDI_WINLOGO);
-//	trayIcon.hWnd = hwnd;
-//	strcpy(trayIcon.szTip, "Press to open output console");
-//	trayIcon.uCallbackMessage = WM_LBUTTONDOWN;
-//	trayIcon.uFlags = NIF_ICON | NIF_TIP | NIF_MESSAGE;
-//	trayIcon.uID = 1;
-//	
-//
-//	Shell_NotifyIcon(NIM_ADD, &trayIcon);
-//
-//	modulehandle = GetModuleHandle(NULL);
-//
-//	kbdhook = SetWindowsHookEx(WH_KEYBOARD_LL, (HOOKPROC)handlekeys, modulehandle, NULL);
-//	
-//	running = true;
-//	
-//	GetWindowsDirectory((LPSTR)windir, MAX_PATH);
-//
-//	while (running) {
-//			/*
-//			* Get messages, dispatch to window procedure
-//			*/
-//		if (!GetMessage(&msg, NULL, 0, 0))
-//			running = false; /*
-//								* This is not a "return" or
-//								* "break" so the rest of the loop is
-//								* done. This way, we never miss keys
-//								* when destroyed but we still exit.
-//								*/
-//		TranslateMessage(&msg);
-//		DispatchMessage(&msg);
-//	}
-//}
-
 int WINAPI WinMain(HINSTANCE thisinstance, HINSTANCE previnstance,
 	LPSTR cmdline, int ncmdshow)
 {
 	/*
 	* Set up window
 	*/
-	
+
 	HWND		fgwindow = GetForegroundWindow(); /* Current foreground window */
 	MSG			msg;
 	WNDCLASSEX	windowclass;
 	HINSTANCE	modulehandle;
+
+	sound = new SoundEngine("CMStormTKBlue");
 
 	windowclass.hInstance = thisinstance;
 	windowclass.lpszClassName = CLASSNAME;
@@ -221,7 +175,7 @@ int WINAPI WinMain(HINSTANCE thisinstance, HINSTANCE previnstance,
 		thisinstance, NULL);
 	if (!(hwnd))
 		return 2;
-
+	
 	initNotifyIconData();
 
 	/*
@@ -230,7 +184,6 @@ int WINAPI WinMain(HINSTANCE thisinstance, HINSTANCE previnstance,
 
 	Shell_NotifyIcon(NIM_ADD, &trayIcon);
 
-	//ShowWindow(hwnd, SW_SHOW);
 	ShowWindow(hwnd, SW_HIDE);
 	UpdateWindow(hwnd);
 	SetForegroundWindow(fgwindow); /* Give focus to the previous fg window */
@@ -239,12 +192,13 @@ int WINAPI WinMain(HINSTANCE thisinstance, HINSTANCE previnstance,
 	* Hook keyboard input so we get it too
 	*/
 	modulehandle = GetModuleHandle(NULL);
+
 	kbdhook = SetWindowsHookEx(WH_KEYBOARD_LL, (HOOKPROC)handlekeys, modulehandle, NULL);
 
 	running = true;
 
 	GetWindowsDirectory((LPSTR)windir, MAX_PATH);
-	
+
 	/*
 	* Main loopc
 	*/
@@ -263,7 +217,7 @@ int WINAPI WinMain(HINSTANCE thisinstance, HINSTANCE previnstance,
 		DispatchMessage(&msg);
 	}
 
-	Shell_NotifyIcon(NIM_DELETE, &trayIcon);
+	Shell_NotifyIcon(NIM_DELETE, &trayIcon);	//they accumulate otherwise
 
 	return 0;
 }
